@@ -1,109 +1,122 @@
 /*
-DiskPlayer: to play sound files from disk
-By Robert van Heumen 2017
+DiskPlayer Class to play sound files from disk. Number of channels can be 1 to 4 and is automatically detected.
+Developed by Robert van Heumen 2017 http://west28.nl/
 Depends on the FreeAfter quark.
+Note: synthDefs are only added if not already present in the global SynthDescLib. So if you've made changes, recompile the library. (Due to a bug with cueSoundFile: https://github.com/supercollider/supercollider/issues/2474).
 
-Arguments (the first one is mandatory, the rest optional)
+Arguments (the first two are mandatory, the rest optional)
 server: usually 's'
-soundFilePath: the full path to the soundfile to play
-out: the output channel
-group: the synth group
-loop: 0=no looping, 1=looping
-att: attack of the playback synth's envelope
-rel: release of the playback synth's envelope
-lev: level of playback (0-1)
-bufFramePower: the buffer allocated has size 2**bufFramePower (default buffer size is about 11 sec so provide smaller number for shorter samples to loop)
-startPos: start position into the soundfile in seconds
-doneAction: set to 2 to have the buffer freed automatically when finished playing a non-looping soundfile
-autoplay: when true the playback starts immediately on instantiation
+path: the full path to the soundfile to play
+out: the output channel (default 0)
+group: the synth group (default nil)
+loop: 0=no looping, 1=looping (default 0)
+att: attack of the playback synth's envelope (default 0.1)
+rel: release of the playback synth's envelope (default 0.1)
+lev: level of playback (0-1) (default 1)
+bufPwr: the buffer allocated has size 2**bufPwr (default 19; then the buffer size is about 11 sec so provide smaller number for shorter samples to loop)
+startPos: start position into the soundfile in seconds (default 0)
+doneAction: set to 2 to have the buffer freed automatically when finished playing a non-looping soundfile (default 0)
+autoPlay: when true the playback starts immediately on instantiation (default false)
+verbose: when true lots of message will be outputted while using DiskPlayer (default true)
 
-NOTE: doneAction should not be used, and loop=1 has some issues for shorter files. This has to do with a bug with cueSoundFile: https://github.com/supercollider/supercollider/issues/2474
-NOTE: in connection with the remark above, .remove should not be called on created DiskPlayers, as it stalls starting a new DiskPlayer with the error message: File '/Users/Robert/---data---/Audio/random samples/oguz004a.wav' could not be opened: Error. Bad format field in SF_INFO struct when openning a RAW file for read.
+Use:
+a = DiskPlayer.new(s,"/Users/Robert/---data---/Audio/random samples/oguz004a.wav", loop: 1, bufPwr: 17, startPos: 0.5, autoPlay: true, doneAction: 2);
+a.stop;
+a.start;
+a.remove;
 
 */
 
 DiskPlayer {
 
-	var server, soundFilePath, out, group, loop, att, rel, lev, bufFramePower, startPos, doneAction, autoplay;
-	var soundSynth, buf, numChan, soundFileFound = 0, soundFileShort = "";
+	var server, path, out, group, loop, att, rel, lev, rate, ff, bufPwr, startPos, doneAction, autoPlay, verbose;
+	var synth, buf, numChan, sRate, file, numFrames, fileFound = 0, pathShort = "";
 
 	*new {
-		arg server, soundFilePath, out = 0, group = nil, loop = 0, att = 0.1, rel = 0.1, lev = 1, bufFramePower = 19, startPos = 0, doneAction = 0, autoplay = false;
-		^super.newCopyArgs(server, soundFilePath, out, group, loop, att, rel, lev, bufFramePower, startPos, doneAction, autoplay).init;
+		arg server, path, out = 0, group = nil, loop = 0, att = 0.1, rel = 0.1, lev = 1, rate = 1, ff = 20000,
+			bufPwr = 19, startPos = 0, doneAction = 0, autoPlay = false, verbose = true;
+		^super.newCopyArgs(server, path, out, group, loop, att, rel, lev, rate, ff, bufPwr, startPos, doneAction, autoPlay, verbose).init;
 	}
 
-	init { // initialize
-		var soundFileLength, soundFile;
+	init {
+		sRate = server.sampleRate;
 
-		// define SynthDefs
-		[1,2,4].do { |i|
-			SynthDef("diskPlayer"++i, {
-				arg buf, gate, out, loop, att, rel, lev, mono = 0;
-				var sig, env;
-				if( i < 4,
-					{sig = DiskIn.ar(i, buf, loop)},
-					{sig = VDiskIn.ar(i, buf, 1, loop)}
-				);
-				env = EnvGen.kr(Env.adsr(att,0,1,rel), gate, doneAction: 2);
-				FreeSelfWhenDone.kr(sig);
-				if(i==2, { sig = ( mono * [Mix.ar(sig),0*sig[1]] ) + ( (1-mono) * sig ) });
-				Out.ar(out, lev * env * sig);
-			}).send(server);
-		};
+		// only add synthDefs if not already there
+		// this has to do with a bug with cueSoundFile: https://github.com/supercollider/supercollider/issues/2474
+		if(SynthDescLib.global.synthDescs.keys.asArray.indexOf(\diskPlayer4).isNil, { this.sendSynthDefs() });
 
-		// if a buffer is already allocated, free it / this means that init is called a second time, for some reason
-		this.remove(now:1);
+		// allocate buffer for VDiskIn
+		if(path.notNil, {
+			pathShort = subStr(path, path.findBackwards("/",offset: max(0,(path.size - 30))), path.size);
+			file = SoundFile.new;
+			if(file.openRead(path), { // file found
 
-		// allocate buffer for (V)DiskIn
-		if(soundFilePath.notNil, {
-			soundFileShort = subStr(soundFilePath,
-				soundFilePath.findBackwards("/",offset: max(0,(soundFilePath.size - 30))), soundFilePath.size);
-			soundFile = SoundFile.new;
-			if(soundFile.openRead(soundFilePath), { // file found
-				soundFileFound = 1;
-				numChan = soundFile.numChannels;
-				soundFileLength = soundFile.numFrames / server.sampleRate;
-				buf = Buffer.alloc(server, 2**bufFramePower, numChan);
-				"\nDiskPlayer sample file information:".postln;
-				("\tBuffer" + buf.bufnum + "size" + (2**bufFramePower) + "allocated").postln;
-				("\tSample numChan:" + numChan + "length:" + soundFileLength).postln;
-				soundFile.close;
+				// set variables and allocate buffer
+				fileFound = 1;
+				numChan = file.numChannels;
+				numFrames = file.numFrames;
+				buf = Buffer.alloc(server, 2**bufPwr, numChan);
+				if(verbose, {
+					"\nDiskPlayer samplefile:".postln;
+					("\tBuffer" + buf.bufnum + "size" + (2**bufPwr) + "allocated").postln;
+					("\tSample numChan:" + numChan + "length:" + (numFrames/sRate).round(0.01) ++ "sec").postln;
+				});
+				file.close;
+
+				// start playback if told so
+				if(autoPlay, { { this.play }.defer(0.01) });
+
 				},{ // file not found
-					soundFileFound = 0;
-					("\nDiskPlayer ERROR: soundfile:" + soundFileShort + "not found.").postln;
+					fileFound = 0;
+				("\nDiskPlayer ERROR: soundfile:" + pathShort + "not found.").postln;
 			});
 			},{ // no path provided
-				"\nDiskPlayer: no soundfile path argument: only SynthDefs send to server.".postln
+				"\nDiskPlayer: no soundfile path argument".postln
 		});
+	}
 
-		// start playback if told so
-		if(autoplay, { { this.play }.defer(0.01) });
+	sendSynthDefs {
+		[1,2,3,4].do { |i|
+			SynthDef(\diskPlayer++i, {
+				arg buf, gate, out, loop, att, rel, lev, rate, ff, mono = 0;
+				var sig, env;
+				sig = VDiskIn.ar(i, buf, rate, loop);
+				env = EnvGen.kr(Env.adsr(att,0,1,rel), gate, doneAction: 2);
+				FreeSelfWhenDone.kr(sig);
+				sig = RLPF.ar(sig, ff, 0.5);
+				if(i==2, { sig = ( mono * [Mix.ar(sig),0*sig[1]] ) + ( (1-mono) * sig ) });
+				Out.ar(out, lev * env * sig);
+			}).add;
+		};
+		if(verbose, { "\nDiskPlayer: SynthDefs sent".postln });
 	}
 
 	set { // setter for parameters
 		arg param, value;
-		if(soundSynth.notNil, {soundSynth.set(param,value)});
+		if(synth.notNil, {synth.set(param,value)});
 	}
 
 	start { // start playback
 		arg mono = 0;
 
-		// if no buffer allocated, run init first / should not happen actually
-		if(buf.isNil, {this.init});
+		// if no buffer allocated, run init first
+		if(buf.isNil, { this.init });
 
 		// play!
-		if((soundFileFound==1) && (soundSynth.isNil), {
-			("\nDiskPlayer: playing sound file" + soundFileShort + if(mono==1,{"(mono)"},{""})+ if(loop==0,{"(one shot)"},{"(looped)"})).postln;
+		if((fileFound==1) && (synth.isNil), {
 			buf.close;
-			buf.cueSoundFile(soundFilePath, startPos * server.sampleRate);
-			("DiskPlayer: output to channel" + switch(numChan, 1, {out}, 2, {[out,out+1].asString}, 4, {(out..out+3).asString}) ).postln;
-			soundSynth = Synth("diskPlayer"++numChan,
-				[\buf, buf, \gate, 1, \out, out, \loop, loop, \att, att, \rel, rel, \lev, lev, \mono, mono],
+			buf.cueSoundFile(path, startPos * sRate);
+			synth = Synth(\diskPlayer++numChan,
+				[\buf, buf, \gate, 1, \out, out, \loop, loop, \att, att, \rel, rel, \lev, lev, \rate, rate, \ff, ff, \mono, mono],
 				target: group)
 			.freeAction_({
-				"freeAction called".postln;
-				soundSynth = nil;
+				synth = nil;
 				if(doneAction == 2, { this.remove });
+			});
+			if(verbose, {
+				"\nDiskPlayer playing:".postln;
+				("\t" + pathShort ++ if(mono==1,{"(mono)"},{""})+ if(loop==0,{"(one shot)"},{"(looped)"})).postln;
+				("\toutput to channel" + switch(numChan, 1, {out}, 2, {[out,out+1].asString}, 4, {(out..out+3).asString}) ).postln;
 			});
 		});
 	}
@@ -111,16 +124,16 @@ DiskPlayer {
 	play { this.start } // just an alias for start
 
 	stop { // stop playback
-		if(soundSynth.notNil, {
-			("\nDiskPlayer: stopping sound file" + soundFileShort).postln;
-			soundSynth.set(\gate,0);
-			soundSynth = nil;
+		if(synth.notNil, {
+			if(verbose, { ("\nDiskPlayer: stopping" + pathShort).postln });
+			synth.set(\gate,0);
+			synth = nil;
 		});
 	}
 
 	freeBuf { // free buffer // this seems to cause issues with cueSoundFile (see above)
 		if(buf.notNil, {
-			("\nDiskPlayer: buffer" + buf.bufnum + "for" + soundFileShort + "freed").postln;
+			if(verbose, { ("\nDiskPlayer: buffer for" + pathShort + "freed").postln });
 			buf.close; buf.free; buf = nil;
 		});
 	}
