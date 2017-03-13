@@ -1,0 +1,106 @@
+class:: DiskPlayer
+summary:: A class to play sound files from disk. Basically a wrapper around VDiskIn.
+categories:: UGens>InOut, UGens>Buffer
+related:: Classes/VDiskIn, Classes/DiskIn, Classes/PlayBuf
+
+DESCRIPTION::
+This class can be used to play sound files from harddisk. It is basically a wrapper around VDiskIn. The number of audio channels of the sound file can be 1 to 4 and is automatically detected. When an instance is created, a buffer is allocated and the number of channels and the lenght of the sound file are determined. Furthermore 4 SynthDefs are added to the server to playback 1 to 4 channel files respectively. These are using VDiskIn internally. There are a number of playback arguments that can be set on instantiation as well as during playback. This class is ment to playback fairly long files.
+
+CLASSMETHODS::
+
+METHOD:: new
+Creates an instance, allocates a buffer and determines length and number of audio channels within the sound file. If autoPlay is set to true, the sound file is played immediately on creation.
+
+ARGUMENT:: server
+Usually just 's'. Required.
+
+ARGUMENT:: path
+The path to the sound file to play. Required.
+
+ARGUMENT:: out
+The output channel. Defaults to 0 and gets expanded depending on the number of channels in the sound file.
+
+ARGUMENT:: group
+The group the playback synth gets added to. Defaults to nil.
+
+ARGUMENT:: loop
+Determines whether the playback loops. 0 = not looping (default), 1 = looping.
+
+ARGUMENT:: att
+The attack of the envelope in seconds. Defaults to 0.1.
+
+ARGUMENT:: rel
+The release of the envelope in seconds. Defaults to 0.1.
+
+ARGUMENT:: lev
+The output level of playback in the 0-1 range. Defaults to 1. Values > 1 can possibly distort the sound.
+
+ARGUMENT:: rate
+The rate of playback. Defaults to 1.
+
+ARGUMENT:: ff
+The cutoff frequentie for a RLPF on the playback. Defaults to 20000. The rq is fixed to 0.5.
+
+ARGUMENT:: bufPwr
+The allocated buffer will have a size of 2**bufPwr. Defaults to 19, which creates a buffer of approx 11 seconds. For shorter files to loop, use smaller values, like 16 or 17.
+
+ARGUMENT:: startPos
+The start position into the buffer, in seconds. Defaults to 0.
+
+ARGUMENT:: doneAction
+Pass a value of 2 to have a non-looping playback automatically close and free the buffer when finished. Defaults to 0. No other values are posible.
+
+ARGUMENT:: autoPlay
+When true the playback will start immediately at instantiation. Defaults to false.
+
+ARGUMENT:: verbose
+When false there will be very little feedback in the postwindow. Defaults to true.
+
+
+INSTANCEMETHODS::
+
+METHOD:: start
+This method starts the playback. Gets called automatically if autoPlay is true.
+
+ARGUMENT:: mono
+If set to 1 the playback will be mixed to mono. Only works for stereo files. Default is 0.
+
+METHOD:: play
+This is an alias for the start method.
+
+METHOD:: stop
+This method stops playback, but does not close and free the buffer. Calling start after stop will start playback from startPos.
+
+METHOD:: remove
+This method will stop playback and close and free the buffer after the release time set by the rel argument. If you call start on the DiskPlayer after this, the init method will be executed, creating a new buffer.
+
+ARGUMENT:: now
+If set to 1, the buffer is closed and freed immediately, disregarding the release time. Defaults to 0.
+
+METHOD:: set
+This method can be used to set the following arguments: out, loop, att, rel, lev, rate, ff, mono.
+
+ARGUMENT:: param
+The argument name as a symbol (i.e. \lev).
+
+ARGUMENT:: value
+The value.
+
+METHOD:: init
+This method is executed on instantiation. Allocates a buffer, sets variables and adds SynthDefs.
+
+METHOD:: sendSynthDefs
+Adds SynthDefs to the server, but only if they do not exist already in the global SynthDescLib. So when you change the SynthDefs you will have to recompile the class library. This is a work around for a bug with cueSoundFile: https://github.com/supercollider/supercollider/issues/2474.
+
+METHOD:: freeBuf
+This method closes and frees the buffer.
+
+
+EXAMPLES::
+
+code::
+a = DiskPlayer.new(s,Platform.resourceDir +/+ "sounds/a11wlk01.wav", loop: 1, bufPwr: 17, startPos: 0.5, autoPlay: true, doneAction: 2);
+a.stop;
+a.start;
+a.remove;
+::
