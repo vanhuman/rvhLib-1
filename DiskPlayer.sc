@@ -18,6 +18,8 @@ startPos: start position into the soundfile in seconds (default 0)
 doneAction: set to 2 to have the buffer freed automatically when finished playing a non-looping soundfile (default 0)
 autoPlay: when true the playback starts immediately on instantiation (default false)
 verbose: when true lots of message will be outputted while using DiskPlayer (default true)
+mono: only for stereo files: whether playback should be mono (value 1) or stereo (value 0)
+altOut: extra output channel, for example for recording internally with MOTU / specify level as arg for .play and .start (default is 1!)
 
 Use:
 a = DiskPlayer.new(s,"/Users/Robert/---data---/Audio/random samples/oguz004a.wav", loop: 1, bufPwr: 17, startPos: 0.5, autoPlay: true, doneAction: 2);
@@ -29,13 +31,14 @@ a.remove;
 
 DiskPlayer {
 
-	var server, path, out, group, loop, att, rel, lev, rate, ff, bufPwr, startPos, doneAction, autoPlay, verbose;
-	var synth, buf, numChan, sRate, file, numFrames, fileFound = 0, pathShort = "";
+	var server, path, out, group, loop, att, rel, lev, rate, ff, bufPwr, startPos, doneAction, autoPlay, verbose, mono, altOut;
+	var synth, buf, numChan, sRate, file, numFrames, fileFound = 0, pathShort = "", task;
 
 	*new {
 		arg server, path, out = 0, group = nil, loop = 0, att = 0.1, rel = 0.1, lev = 1, rate = 1, ff = 20000,
-			bufPwr = 19, startPos = 0, doneAction = 0, autoPlay = false, verbose = true;
-		^super.newCopyArgs(server, path, out, group, loop, att, rel, lev, rate, ff, bufPwr, startPos, doneAction, autoPlay, verbose).init;
+			bufPwr = 19, startPos = 0, doneAction = 0, autoPlay = false, verbose = true, mono = 0, altOut = 8;
+		^super.newCopyArgs(server, path, out, group, loop, att, rel, lev, rate, ff,
+			bufPwr, startPos, doneAction, autoPlay, verbose, mono, altOut).init;
 	}
 
 	init {
@@ -47,7 +50,7 @@ DiskPlayer {
 
 		// allocate buffer for VDiskIn
 		if(path.notNil, {
-			pathShort = subStr(path, path.findBackwards("/",offset: max(0,(path.size - 30))), path.size);
+			pathShort = subStr(path, path.findBackwards("/",offset: max(0,(path.size - 30))) + 1, path.size);
 			file = SoundFile.new;
 			if(file.openRead(path), { // file found
 
@@ -74,40 +77,39 @@ DiskPlayer {
 				"\nDiskPlayer: no soundfile path argument".postln
 		});
 	}
-
 	sendSynthDefs {
 		[1,2,3,4].do { |i|
 			SynthDef(\diskPlayer++i, {
-				arg buf, gate, out, loop, att, rel, lev, rate, ff, mono = 0;
+				arg buf, gate, out, loop, att, rel, lev, rate, ff, mono, altOutLev = 0;
 				var sig, env;
 				sig = VDiskIn.ar(i, buf, rate, loop);
 				env = EnvGen.kr(Env.adsr(att,0,1,rel), gate, doneAction: 2);
 				FreeSelfWhenDone.kr(sig);
 				sig = RLPF.ar(sig, ff, 0.5);
+				sig = lev * env * sig;
 				if(i==2, { sig = ( mono * [Mix.ar(sig),0*sig[1]] ) + ( (1-mono) * sig ) });
-				Out.ar(out, lev * env * sig);
+				Out.ar(altOut, sig * altOutLev);
+				Out.ar(out, sig);
 			}).add;
 		};
 		if(verbose, { "\nDiskPlayer: SynthDefs sent".postln });
 	}
-
-	set { // setter for parameters
+	// setter for parameters
+	set {
 		arg param, value;
 		if(synth.notNil, {synth.set(param,value)});
 	}
-
-	start { // start playback
-		arg mono = 0;
-
+	// start playback
+	start {
+		arg altOutLev = 1;
 		// if no buffer allocated, run init first
 		if(buf.isNil, { this.init });
-
 		// play!
 		if((fileFound==1) && (synth.isNil), {
 			buf.close;
 			buf.cueSoundFile(path, startPos * sRate);
 			synth = Synth(\diskPlayer++numChan,
-				[\buf, buf, \gate, 1, \out, out, \loop, loop, \att, att, \rel, rel, \lev, lev, \rate, rate, \ff, ff, \mono, mono],
+				[\buf, buf, \gate, 1, \out, out, \loop, loop, \att, att, \rel, rel, \lev, lev, \rate, rate, \ff, ff, \mono, mono, \altOutLev, altOutLev],
 				target: group)
 			.freeAction_({
 				synth = nil;
@@ -115,34 +117,42 @@ DiskPlayer {
 			});
 			if(verbose, {
 				"\nDiskPlayer playing:".postln;
-				("\t" + pathShort ++ if(mono==1,{"(mono)"},{""})+ if(loop==0,{"(one shot)"},{"(looped)"})).postln;
+				("\t" + pathShort ++ if(mono==1,{" (mono)"},{""})+ if(loop==0,{"(one shot)"},{"(looped)"})).postln;
 				("\toutput to channel" + switch(numChan, 1, {out}, 2, {[out,out+1].asString}, 4, {(out..out+3).asString}) ).postln;
+				("\talt output to channel" + switch(numChan, 1, {altOut}, 2, {[altOut,altOut+1].asString}, 4, {(altOut..altOut+3).asString}) ).postln;
 			});
 		});
 	}
-
-	play { this.start } // just an alias for start
-
-	stop { // stop playback
+	// start playback
+	play {
+		arg altOutLev = 1;
+		this.start(altOutLev);
+	}
+	// start playback quantized / alternative output on by default
+	playTask {
+		arg quant, altOutLev = 1;
+		task = Task.new({ this.start(altOutLev) }).play(quant: quant);
+	}
+	// stop playback
+	stop {
 		if(synth.notNil, {
 			if(verbose, { ("\nDiskPlayer: stopping" + pathShort).postln });
 			synth.set(\gate,0);
 			synth = nil;
+			if(task.notNil, { task.stop });
 		});
 	}
-
-	freeBuf { // free buffer // this seems to cause issues with cueSoundFile (see above)
+	// free buffer // this seems to cause issues with cueSoundFile (see above)
+	freeBuf {
 		if(buf.notNil, {
 			if(verbose, { ("\nDiskPlayer: buffer for" + pathShort + "freed").postln });
 			buf.close; buf.free; buf = nil;
 		});
 	}
-
-	remove { // stop playback and free buffer, after release time
+	// stop playback and free buffer, after release time
+	remove {
 		arg now = 0;
 		this.stop;
 		if(now == 0, { {this.freeBuf}.defer(rel) }, { this.freeBuf });
 	}
-
-
 }

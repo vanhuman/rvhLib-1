@@ -35,6 +35,7 @@
 				Pen.color = Color.white;
 			};
 			Pen.font = Font.sansSerif(8);
+			if(~font.notNil, {Pen.font = Font(~font, 8)});
 			Pen.stringCenteredIn("    0", Rect(0, 0, meterWidth, 12));
 			Pen.stringCenteredIn("-12", Rect(0, (height-70)/4, meterWidth, 12));
 			Pen.stringCenteredIn("-24", Rect(0, (height-64)/2, meterWidth, 12));
@@ -43,9 +44,16 @@
 
 		(numIns > 0).if({
 			// ins
-			StaticText(view, Rect(30, 5, 250, 15))
+			// RvH
+			if(~font.notNil, {
+				StaticText(view, Rect(30, 5, 250, 15))
+				.font_(Font(~font, 10))
+				.string_("Inputs");
+			}, {
+				StaticText(view, Rect(30, 5, 250, 15))
 				.font_(Font.sansSerif(10))
 				.string_("Inputs");
+			});
 			inmeters = Array.fill( numIns+numGainedChans, { arg i;
 				var comp;
 				// RvH; specific channel names for MOTU
@@ -56,10 +64,18 @@
 				if(i>=numIns, {chan = 50 + (i - numIns)});
 				// RvH END
 				comp = CompositeView(innerView, Rect(0,0,meterWidth,height-35)).resize_(5);
-				StaticText(comp, Rect(0, height-50, meterWidth, 15))
-					.font_(Font.sansSerif(9))
-				// .string_(i.asString); // RvH
+				// RvH
+				if(~font.notNil, {
+					StaticText(comp, Rect(0, height-50, meterWidth, 15))
+					.font_(Font(~font, 9))
+					// .string_(i.asString); // RvH
 					.string_(chan);
+				}, {
+					StaticText(comp, Rect(0, height-50, meterWidth, 15))
+					.font_(Font.sansSerif(9))
+					// .string_(i.asString); // RvH
+					.string_(chan);
+				});
 				levelIndic = LevelIndicator( comp, Rect(0,0,meterWidth,height-50) ).warning_(meterWarning).critical_(meterCritical)
 				// .style_(1)
 					.drawsPeak_(true)
@@ -83,9 +99,16 @@
 
 		// outs
 		(numOuts > 0).if({
-			StaticText(view, Rect(10 + if(numIns > 0 , ((numIns + 2 + numGainedChans) * (meterWidth + gapWidth)), 0), 5, 200, 15))
+			// RvH
+			if(~font.notNil, {
+				StaticText(view, Rect(10 + if(numIns > 0 , ((numIns + 2 + numGainedChans) * (meterWidth + gapWidth)), 0), 5, 200, 15))
+				.font_(Font(~font, 10))
+				.string_("Outputs");
+			}, {
+				StaticText(view, Rect(10 + if(numIns > 0 , ((numIns + 2 + numGainedChans) * (meterWidth + gapWidth)), 0), 5, 200, 15))
 				.font_(Font.sansSerif(10))
 				.string_("Outputs");
+			});
 			outmeters = Array.fill( numOuts, { arg i;
 				var comp;
 				// RvH: specific channel names for MOTU
@@ -95,10 +118,17 @@
 					{chan = (i+1).asString});
 				// RvH END
 				comp = CompositeView(innerView, Rect(0,0,meterWidth,height-35));
-				StaticText(comp, Rect(0, height-50, meterWidth, 15))
-					.font_(Font.sansSerif(9))
-				// .string_(i.asString); //RvH
+				if(~font.notNil, {
+					StaticText(comp, Rect(0, height-50, meterWidth, 15))
+					.font_(Font(~font, 9))
+					// .string_(i.asString); //RvH
 					.string_(chan);
+				}, {
+					StaticText(comp, Rect(0, height-50, meterWidth, 15))
+					.font_(Font.sansSerif(9))
+					// .string_(i.asString); //RvH
+					.string_(chan);
+				});
 				levelIndic = LevelIndicator( comp, Rect(0,0,meterWidth,height-50) ).warning_(meterWarning).critical_(meterCritical)
 				// .style_(1)
 					.drawsPeak_(true)

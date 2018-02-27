@@ -3,6 +3,7 @@ This class expects as argument the value MUL, EXT or IAC1. If ~midiOutDevice is 
 If a second argument is passed, the midiOutPort, this class will try to findByName the device with [midiOutDevice, midiOutPort]. In this case this device has to be connected, otherwise it will throw an error.
 */
 MIDIout {
+	var iac1ID = 0, iac1i, mulID = 0, lpkID = 0, extID = 0, iac2ID = 0;
 
 	*new
 	{
@@ -14,7 +15,6 @@ MIDIout {
 	init
 	{
 		arg midiOutDevice, midiOutPort;
-		var iac1ID = 0, iac1i, mulID = 0, lpkID = 0, extID = 0, iac2ID = 0;
 
 		if(midiOutDevice.notNil, {~midiOutDevice = midiOutDevice});
 
@@ -33,13 +33,14 @@ MIDIout {
 				if(~midiOutDevice == "MUL", {
 					~midiOut = MIDIOut(i);
 					~midiOut.latency_(0.01);
-					"MIDI out to MUL".postln;
+					("MIDI out to MUL with ID=" ++ mulID).postln;
 				});
 			}
-			// M-Audio MidiSport, Teensy MIDI, Ploytec MIDI Cable -> EXT
+			// M-Audio MidiSport, Teensy MIDI, Ploytec MIDI Cable, iCON iControl V1.01 -> EXT
 			{
 				((MIDIClient.sources[i].device == "MIDISPORT 2x2") && (MIDIClient.sources[i].name == "Port A")) ||
 				(MIDIClient.sources[i].device == "Teensy MIDI") ||
+				((MIDIClient.sources[i].device == "iCON iControl V1.01") && (MIDIClient.sources[i].name == "Port 1")) ||
 				(MIDIClient.sources[i].device == "Ploytec MIDI Cable")
 			}
 			{
@@ -48,7 +49,7 @@ MIDIout {
 				if(~midiOutDevice == "EXT", {
 					~midiOut = MIDIOut(i);
 					~midiOut.latency_(0.01);
-					"MIDI out to EXT (MIDISPORT or Teensy)".postln;
+					("MIDI out to EXT (MIDISPORT, Teensy, Ploytec or iCON) with ID=" ++ extID).postln;
 				});
 			}
 			// IAC1 -> IAC1
@@ -62,8 +63,30 @@ MIDIout {
 				if(~midiOutDevice == "IAC1", {
 					~midiOut = MIDIOut(i);
 					~midiOut.latency_(0.01);
-					"MIDI out to IAC1".postln;
+					("MIDI out to IAC1 with ID=" ++ iac1ID).postln;
 				});
+			}
+			// IAC2 -> IAC2
+			{
+				(MIDIClient.sources[i].device == "IAC Driver") && (MIDIClient.sources[i].name == "IAC Bus 2")
+			}
+			{
+				iac2ID = MIDIClient.sources[i].uid;
+				// organize MIDI output
+				if(~midiOutDevice == "IAC2", {
+					~midiOut = MIDIOut(i);
+					~midiOut.latency_(0.01);
+					("MIDI out to IAC2 with ID=" ++ iac2ID).postln;
+				});
+			}
+			// LPK, MPK, microKEY -> LPK
+			{
+				(MIDIClient.sources[i].device == "LPK25") ||
+				(MIDIClient.sources[i].device == "MPKmini2") ||
+				((MIDIClient.sources[i].device == "microKEY") && (MIDIClient.sources[i].name == "KEYBOARD"))
+			}
+			{
+				lpkID = MIDIClient.sources[i].uid
 			}
 			;
 		});
@@ -83,5 +106,9 @@ MIDIout {
 		});
 
 		"### Done initializing MIDI".postln;
+	}
+
+	getIDs {
+		^[iac1ID, iac2ID, mulID, lpkID, extID]
 	}
 }
