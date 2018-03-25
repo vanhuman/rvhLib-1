@@ -16,7 +16,7 @@ OSCMonitor {
 			if(showAddr==1,
 				{oscMsg = addr.ip + "--" + addr.port + "--" + msg.asString},
 				{oscMsg = msg.asString});
-			("OSC IN --" + oscMsg).postln;
+			("OSC IN --" + oscMsg + time.asTimeString).postln;
 		};
 	}
 

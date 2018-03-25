@@ -3,6 +3,9 @@ NetAddrMon : NetAddr {
 
 	sendMsg { arg ... args;
 		super.sendMsg( *args );
-		if(~oscOutMonitor == 1, {("OSC OUT --" + super.hostname + "--" + super.port + "--" + args).postln});
+		if(~oscOutMonitor == 1, {
+			("OSC OUT --" + super.hostname + "--" + super.port + "--" + args).postln;
+			("\tSysTime:" + SystemClock.seconds.asTimeString).postln;
+		});
 	}
 } 
