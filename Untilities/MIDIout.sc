@@ -25,7 +25,9 @@ MIDIout {
 			case
 			// MOTU Ultralite -> MUL
 			{
-				(MIDIClient.sources[i].device == "UltraLite mk3 Hybrid") && (MIDIClient.sources[i].name == "MIDI Port")
+				((MIDIClient.sources[i].device == "UltraLite mk3 Hybrid") || (MIDIClient.sources[i].device == "UltraLite mk3 Hybrid #2")
+					|| (MIDIClient.sources[i].device == "828mk2") || (MIDIClient.sources[i].device == "UltraLite"))
+				&& (MIDIClient.sources[i].name == "MIDI Port")
 			}
 			{
 				mulID = MIDIClient.sources[i].uid;
