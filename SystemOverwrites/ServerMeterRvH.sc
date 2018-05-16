@@ -1,9 +1,10 @@
-+ServerMeterView{
-	*new{ |aserver,parent,leftUp,numIns,numOuts,numGainedChans|
-		^super.new.init(aserver,parent,leftUp,numIns,numOuts,numGainedChans)
++ServerMeterView {
+
+	*new{ |aserver,parent,leftUp,numIns,numOuts,numGainedChans,numResampleChans|
+		^super.new.init(aserver,parent,leftUp,numIns,numOuts,numGainedChans,numResampleChans)
 	}
 
-	init { arg aserver, parent, leftUp, anumIns,anumOuts, numGainedChans;
+	init { arg aserver, parent, leftUp, anumIns,anumOuts, numGainedChans, numResampleChans;
 		var innerView, viewWidth, levelIndic, palette;
 		var motuAvail = if(~audioDevice.notNil, {~audioDevice.contains("MOTU")}, {false}); // RvH
 		var meterWarning, meterCritical; // RvH
@@ -18,7 +19,7 @@
 		numIns = anumIns ?? { server.options.numInputBusChannels };
 		numOuts = anumOuts ?? { server.options.numOutputBusChannels };
 
-		viewWidth= this.class.getWidth(anumIns+numGainedChans,anumOuts);
+		viewWidth= this.class.getWidth(anumIns + numGainedChans + numResampleChans,anumOuts);
 
 		leftUp = leftUp ? (0@0);
 
@@ -54,14 +55,13 @@
 				.font_(Font.sansSerif(10))
 				.string_("Inputs");
 			});
-			inmeters = Array.fill( numIns+numGainedChans, { arg i;
+			inmeters = Array.fill( numIns + numGainedChans + numResampleChans, { arg i;
 				var comp;
 				// RvH; specific channel names for MOTU
 				var chan;
-				if((motuAvail == true) && ((i==10) || (i==11)),
-					{chan = "R" ++ (i-9).asString},
-					{chan = (i+1).asString});
-				if(i>=numIns, {chan = 50 + (i - numIns)});
+				if( (motuAvail == true) and: { (i == 10) || (i == 11) }, { chan = "R" ++ (i-9).asString }, { chan = (i+1).asString });
+				if( i >= numIns and: { i< (numIns+numGainedChans) }, { chan = 50 + (i - numIns) } ); // gained channels
+				if( i >= (numIns+numGainedChans), { chan = 80 + i - numIns - numGainedChans } ); // resample channels
 				// RvH END
 				comp = CompositeView(innerView, Rect(0,0,meterWidth,height-35)).resize_(5);
 				// RvH
@@ -100,22 +100,17 @@
 		// outs
 		(numOuts > 0).if({
 			// RvH
-			if(~font.notNil, {
-				StaticText(view, Rect(10 + if(numIns > 0 , ((numIns + 2 + numGainedChans) * (meterWidth + gapWidth)), 0), 5, 200, 15))
-				.font_(Font(~font, 10))
+			StaticText(view, Rect(10 + if(numIns > 0 , ((numIns + 2 + numGainedChans + numResampleChans) * (meterWidth + gapWidth)), 0), 5, 200, 15))
+				.font_( if(~font.notNil, { Font(~font, 10) }, { Font.sansSerif(10) }) )
 				.string_("Outputs");
-			}, {
-				StaticText(view, Rect(10 + if(numIns > 0 , ((numIns + 2 + numGainedChans) * (meterWidth + gapWidth)), 0), 5, 200, 15))
-				.font_(Font.sansSerif(10))
-				.string_("Outputs");
-			});
 			outmeters = Array.fill( numOuts, { arg i;
 				var comp;
 				// RvH: specific channel names for MOTU
 				var chan;
 				if(motuAvail == true,
-					{if(i<2, {chan = "M" ++ (i+1).asString}, {chan = (i-1).asString});},
-					{chan = (i+1).asString});
+					{ if( i < 2, { chan = "M" ++ (i+1).asString }, { chan = (i-1).asString } ) },
+					{ chan = (i+1).asString }
+				);
 				// RvH END
 				comp = CompositeView(innerView, Rect(0,0,meterWidth,height-35));
 				if(~font.notNil, {
@@ -130,7 +125,7 @@
 					.string_(chan);
 				});
 				levelIndic = LevelIndicator( comp, Rect(0,0,meterWidth,height-50) ).warning_(meterWarning).critical_(meterCritical)
-				// .style_(1)
+					// .style_(1)
 					.drawsPeak_(true)
 					.numTicks_(5) // RvH
 					.numMajorTicks_(0); // RvH
@@ -140,13 +135,13 @@
 		this.setSynthFunc(inmeters, outmeters);
 		startResponderFunc = {this.startResponders};
 		this.startResponderInBus(numGainedChans);
+		this.startResponderResampleBus(numGainedChans, numResampleChans);
 		this.start;
 	}
 
-	startResponderInBus{  // RvH: responder for inBus gain routing to channel 50
+	startResponderInBus {  // RvH: responder for inBus gain routing to channel 50 - 53
 		arg numGainedChans;
-		~inresp50 = OSCFunc({|msg|
-			// msg.postln;
+		~respGainedChans = OSCFunc({|msg|
 			{
 				numGainedChans.do {arg i;
 					var baseIndex = 3 + (2*i);
@@ -162,7 +157,25 @@
 		}, ("/InBus").asSymbol, server.addr).fix;
 	}
 
-	stop{
+	startResponderResampleBus {  // RvH: responder for resample busses 80 & 81
+		arg numGainedChans, numResampleChans;
+		~respResampleChans = OSCFunc({|msg|
+			{
+				numResampleChans.do {arg i;
+					var baseIndex = 3 + (2*i);
+					var peakLevel = msg.at(baseIndex);
+					var rmsValue  = msg.at(baseIndex + 1);
+					var meter = inmeters.at(numIns+numGainedChans+i);
+					if (meter.isClosed.not) {
+						meter.peakLevel = peakLevel.ampdb.linlin(dBLow, 0, 0, 1, \min);
+						meter.value = rmsValue.ampdb.linlin(dBLow, 0, 0, 1);
+					}
+				};
+			}.defer;
+		}, ("/ResampleBus").asSymbol, server.addr).fix;
+	}
+
+	stop {
 		serverMeterViews[server].remove(this);
 		if(serverMeterViews[server].size == 0 and: (serverCleanupFuncs.notNil)) {
 			serverCleanupFuncs[server].value;
@@ -171,7 +184,8 @@
 
 		(numIns > 0).if({ inresp.free; });
 		(numOuts > 0).if({ outresp.free; });
-		~inresp50.free; // RvH
+		~respGainedChans.free; // RvH
+		~respResampleChans.free; // RvH
 
 		ServerBoot.remove(startResponderFunc, server)
 	}
@@ -180,21 +194,22 @@
 
 +ServerMeter{
 
-	*new{ |server, numIns, numOuts, xPos = 5, yPos = 305, numGainedChans = 4|
+	*new{ |server, numIns, numOuts, xPos = 5, yPos = 305, numResampleChans = 0|
 
 		var meterView;
-
+		var numGainedChans = if(Server.local.options.numInputBusChannels == 2, { 2 }, { 4 });
 		numIns = numIns ?? { server.options.numInputBusChannels };
 		numOuts = numOuts ?? { server.options.numOutputBusChannels };
 
 		~wMeter = Window.new(server.name ++ " levels (dBFS)",
-							Rect(xPos, yPos, ServerMeterView.getWidth(numIns+numGainedChans,numOuts), 200), // RvH
-							false).background_(Color.white); // RvH
+							Rect(xPos, yPos, ServerMeterView.getWidth(numIns + numGainedChans + numResampleChans, numOuts), 200), // RvH
+							false
+		).background_(Color.white); // RvH
 		~wMeterAvail = 1; // RvH
 		~wMeter.view.background_(Color.white); // RvH
-		~wMeter.onClose = {~wMeterAvail = nil}; // RvH
+		~wMeter.onClose = { ~wMeterAvail = nil }; // RvH
 
-		meterView = ServerMeterView(server, ~wMeter, 0@0, numIns, numOuts, numGainedChans);
+		meterView = ServerMeterView(server, ~wMeter, 0@0, numIns, numOuts, numGainedChans, numResampleChans);
 		meterView.view.keyDownAction_({ arg view, char, modifiers;
 			if(modifiers & 16515072 == 0) {
 				case
