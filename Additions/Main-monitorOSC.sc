@@ -8,15 +8,14 @@ OSCMonitor {
 	classvar <>exclude, <>showAddr;
 
 	*value { |time = 0, addr, port, msg = ([])|
-		var oscMsg;
+		var oscMsg, serverInfo = "";
 		if( port.size != 0 ) { msg = port };
 		if( ([ '/status.reply', '/localhostOutLevels', '/localhostInLevels', '/n_go', '/n_end' ]
 				++ exclude.asCollection ).includes( msg[0] ).not ) {
 //			[ time.asSMPTEString, addr, msg ].postln;
-			if(showAddr==1,
-				{oscMsg = addr.ip + "--" + addr.port + "--" + msg.asString},
-				{oscMsg = msg.asString});
-			("OSC IN --" + oscMsg + time.asTimeString).postln;
+			oscMsg = msg.asString;
+			if( showAddr==1 ) { serverInfo = "\n\tIP:" + addr.ip + "Port:" + addr.port + "Time:" + time.asTimeString };
+			("OSC IN:" + oscMsg ++ serverInfo).postln;
 		};
 	}
 
