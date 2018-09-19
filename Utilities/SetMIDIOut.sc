@@ -2,7 +2,7 @@
 This class expects as argument the value MUL, EXT or IAC1. If ~midiOutDevice is set before, the argument can me omitted. The class will set ~midiOut to the requested MIDI interface; if not connected it will resort to IAC1.
 If a second argument is passed, the midiOutPort, this class will try to findByName the device with [midiOutDevice, midiOutPort]. In this case this device has to be connected, otherwise it will throw an error.
 */
-MIDIout {
+SetMIDIOut {
 	var iac1ID = 0, iac1i, mulID = 0, lpkID = 0, extID = 0, iac2ID = 0;
 
 	*new
