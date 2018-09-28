@@ -17,10 +17,12 @@ GetMIDIInIds {
 		};
 
 		"\n### Getting MIDI Input uid's...".postln;
-		~midiSourcesAll.do { arg currentSource, index;
+		~midiSourcesAll.do { arg currentSource, sourceIndex;
 			var currentDevices = currentSource[\device];
-			currentSource.name.do { arg currentName;
-				MIDIClient.sources.do { arg source, sourceIndex;
+			// create nil array for uid's
+			currentSource[\uid] = Array.newClear(currentSource.name.size);
+			currentSource.name.do { arg currentName, nameIndex;
+				MIDIClient.sources.do { arg source;
 					if (
 						// check if the source-device is in the current device array
 						currentDevices.detectIndex({arg item; item == source.device}).notNil
@@ -28,15 +30,14 @@ GetMIDIInIds {
 						// check if the source-name is the source-name
 						currentName == source.name
 					) {
-						if (currentSource[\uid].isNil) {
-							currentSource[\uid] = List();
+						if (nameIndex == 0) {
 							"".postln;
 						};
-						currentSource[\uid].add(source.uid);
-							deviceID = ~midiSourcesAll.keys[index];
-							devicePort = currentSource[\uid].size - 1;
+						currentSource[\uid][nameIndex] = source.uid;
+						deviceID = ~midiSourcesAll.keys[sourceIndex];
+						devicePort = nameIndex;
 						("Device available:" + deviceID + "on port" + devicePort).postln;
-						("\tSource:" + source).postln;
+						("\tSource:" + source + "with uid:" + source.uid).postln;
 						("\tUse as srcID filter in MIDIdefs: ~midiSourcesAll[\\" ++ deviceID++ "].uid[" ++ devicePort ++ "]").postln;
 					};
 				};
