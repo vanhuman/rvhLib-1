@@ -87,6 +87,7 @@ SetMIDIOutMultiple {
 		~midiOut.size.do { arg index;
 			if (~midiOut[index].isNil) {
 				("Device" + ~midiOutSource[index] + "not available. Using default device" + ~midiSourceDefault + "instead.").postln;
+				("\tUse as MIDIOut device by calling f.e.: ~midiOut[" ++ index ++ "].noteOn(0, 60, 127)").postln;
 				~midiOut[index] = MIDIOut.newByName(defaultDevice, defaultName);
 			};
 		};
