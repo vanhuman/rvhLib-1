@@ -12,7 +12,8 @@
 				mins = mins.asString;
 		});
 		secs = (this%60).trunc(precision);
-		if(secs<10,{ secs = "0"++secs.asString; },{ secs=secs.asString;});
+		if(secs<10,{ secs = "0"++secs.asString; },{ secs=secs.asString; });
+		if (precision == 1, { secs = secs.subStr(0,1); });
 		^(hours ++ mins ++ ":" ++ secs);
 	}
 	midicps { arg tuning = 440, note = 69; // combination of cps and corresponding midi note number
